@@ -1,5 +1,6 @@
 # Geany - Line Operations++
 
+[![CI](https://github.com/Avicennasis/geany-lopp/actions/workflows/test.yml/badge.svg)](https://github.com/Avicennasis/geany-lopp/actions/workflows/test.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Avicennasis/geany-lopp/badge)](https://scorecard.dev/viewer/?uri=github.com/Avicennasis/geany-lopp)
 [![License: GPL v2+](https://img.shields.io/badge/License-GPL_v2%2B-blue.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)

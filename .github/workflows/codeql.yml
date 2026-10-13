@@ -42,7 +42,7 @@ jobs:
         # source language actually tracked in the repo. NOT the `lang`
         # waterfall, which returns a single primary language — a repo can
         # ship three SDKs at once (simsys-logevent is node + python + go).
-        language: [actions]
+        language: [actions, c-cpp]
 
     steps:
       - name: Checkout repository
@@ -55,6 +55,12 @@ jobs:
           go-version: stable
           cache: false
 
+      - name: Install C build dependencies
+        if: matrix.language == 'c-cpp'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends geany geany-common libgtk-3-dev pkg-config
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         with:
@@ -64,7 +70,7 @@ jobs:
           # subdirectory rather than the repo root — and `none` on a compiled
           # language yields an EMPTY database rather than an error, i.e. silent
           # missing coverage.
-          build-mode: ${{ matrix.language == 'go' && 'manual' || (matrix.language == 'java-kotlin' && 'autobuild' || 'none') }}
+          build-mode: ${{ (matrix.language == 'go' || matrix.language == 'c-cpp') && 'manual' || (matrix.language == 'java-kotlin' && 'autobuild' || 'none') }}
 
       - name: Build Go modules (manual build-mode)
         if: matrix.language == 'go'
@@ -72,6 +78,10 @@ jobs:
           git ls-files '*go.mod' | while read -r f; do
             ( cd "$(dirname "$f")" && go build ./... )
           done
+
+      - name: Build C sources (manual build-mode)
+        if: matrix.language == 'c-cpp'
+        run: make
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
