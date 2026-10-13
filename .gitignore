@@ -1,0 +1,4 @@
+*.o
+*.so
+tests/test_lo_core
+tests/test_lo_doc

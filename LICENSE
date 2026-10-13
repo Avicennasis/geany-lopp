@@ -1,0 +1,52 @@
+Geany - Line Operations++
+Copyright (C) 2026 the Geany - Line Operations++ contributors
+
+This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 2 of the License, or (at your
+option) any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program; if not, write to the Free Software Foundation, Inc.,
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+The full text of the licence is in COPYING.
+
+
+PROVENANCE
+----------
+
+This plugin descends from the "Line Operations" plugin in the geany-plugins
+project:
+
+    https://plugins.geany.org/lineoperations.html
+    Copyright (C) 2015 Sylvan Mostert <smostert.dev@gmail.com>
+    Licensed GPL-2+
+
+Upstream's original version, the file layout and substantial parts of the
+implementation are reused here, and every source file carries its
+copyright header. Those contributions remain under the GPL, which is why
+this program as a whole is GPL-2-or-later and cannot be relicensed under
+more permissive terms.
+
+Notepad++ (https://notepad-plus-plus.org/), whose command set this plugin
+reimplements, is likewise GPL-licensed. It places no constraint here: no
+Notepad++ source code was copied, and neither a command list nor the idea
+of sorting lines is copyrightable expression.
+
+
+ATTRIBUTION
+-----------
+
+Sylvan Mostert   original Line Operations plugin (geany-plugins)
+Chow Loong Jin, Colomban Wendling, Enrico Tröger, Frank Lanitz,
+Matthew Brush   geany-plugins maintainers and contributors
+the Geany team   plugin API and libgeany
+
+...and everyone who has filed an issue or sent a patch since. Add yourself
+here as you go.

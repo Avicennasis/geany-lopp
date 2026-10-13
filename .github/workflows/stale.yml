@@ -1,0 +1,41 @@
+name: Close stale issues and PRs
+
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    # ubuntu-latest is deliberate: this workflow renders ONLY for the
+    # public_active tier (public repos), where hosted minutes are free.
+    # Private repos get the self-hosted pool via the runner_labels token
+    # in the test-*/release-* templates — see the Runner rule in the
+    # wiki page (operations/new-github-repo-setup).
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@eb5cf3af3ac0a1aa4c9c45633dd1ae542a27a899 # v10
+        with:
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-message: >
+            This issue has been automatically marked as stale because it has
+            not had recent activity. It will be closed in 14 days if no further
+            activity occurs. A comment or update is enough to keep it open.
+          stale-pr-message: >
+            This PR has been automatically marked as stale because it has not
+            had recent activity. It will be closed in 14 days if no further
+            activity occurs.
+          close-issue-message: "Closing due to inactivity. Re-open or file a new issue if still relevant."
+          close-pr-message: "Closing due to inactivity. Feel free to re-open or open a new PR."
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
+          exempt-issue-labels: "pinned,security,good first issue"
+          exempt-pr-labels: "pinned,security"
+          operations-per-run: 100

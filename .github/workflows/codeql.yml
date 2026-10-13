@@ -1,0 +1,79 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+# Default-deny at the top level (Scorecard Token-Permissions); the analyze
+# job below re-grants exactly what CodeQL needs.
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    # PINNED DELIBERATELY — do not replace with a bare `name: Analyze`.
+    # GitHub derives an unnamed matrix job's title from ALL of its matrix
+    # keys, so adding a second key (build-mode, below) silently renames this
+    # job from "Analyze (actions)" to "Analyze (actions, none)". Several
+    # repos require "Analyze (actions)" as a branch-ruleset status check, and
+    # a renamed job makes that rule UNSATISFIABLE rather than failing: PRs
+    # sit BLOCKED with every check green, and only the merge attempt ever
+    # names the missing context.
+    name: Analyze (${{ matrix.language }})
+    # ubuntu-latest is deliberate: this workflow renders ONLY for the
+    # public_active tier (public repos), where hosted minutes are free.
+    # Private repos get the self-hosted pool via the runner_labels token
+    # in the test-*/release-* templates — see the Runner rule in the
+    # wiki page (operations/new-github-repo-setup).
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Rendered from detection: `actions` plus every CodeQL-supported
+        # source language actually tracked in the repo. NOT the `lang`
+        # waterfall, which returns a single primary language — a repo can
+        # ship three SDKs at once (simsys-logevent is node + python + go).
+        language: [actions]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
+
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        with:
+          languages: ${{ matrix.language }}
+          # Interpreted languages need no build. Go uses manual + the explicit
+          # build below, because autobuild does not reliably find a module in a
+          # subdirectory rather than the repo root — and `none` on a compiled
+          # language yields an EMPTY database rather than an error, i.e. silent
+          # missing coverage.
+          build-mode: ${{ matrix.language == 'go' && 'manual' || (matrix.language == 'java-kotlin' && 'autobuild' || 'none') }}
+
+      - name: Build Go modules (manual build-mode)
+        if: matrix.language == 'go'
+        run: |
+          git ls-files '*go.mod' | while read -r f; do
+            ( cd "$(dirname "$f")" && go build ./... )
+          done
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        with:
+          category: "/language:${{ matrix.language }}"
