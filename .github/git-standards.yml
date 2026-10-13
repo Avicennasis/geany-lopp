@@ -1,0 +1,8 @@
+# Per-repo overrides for /git-standards.
+
+# Repo-owned files the standard must never replace.
+keep:
+  # Builds the C sources (make) before CodeQL analyses them, instead of the
+  # template's buildless c-cpp default, so the database covers exactly what
+  # is compiled.
+  - .github/workflows/codeql.yml
