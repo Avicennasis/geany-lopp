@@ -30,12 +30,14 @@ void lo_edit_get_range(ScintillaObject *sci, lo_range *range);
 
 /*
  * A whole-line operation. Receives the lines of the range with their line
- * terminators already stripped, and may update '*n' if it changes how many
- * lines there are (join and split do).
+ * terminators already stripped. It must leave '*n' equal to the number of
+ * live lines afterwards - anything that drops lines reduces it - and may
+ * replace '*lines' outright (split does). Only the first '*n' entries are
+ * read or freed afterwards.
  *
  * Returns the number of lines removed, or the negative of the number added.
  */
-typedef gint (*lo_line_op_fn)(gchar **lines, gint *n, gpointer user_data);
+typedef gint (*lo_line_op_fn)(gchar ***lines, gint *n, gpointer user_data);
 
 /*
  * An operation Scintilla performs itself, because it is about the caret

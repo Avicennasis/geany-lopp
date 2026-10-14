@@ -41,6 +41,15 @@ gchar **lo_doc_extract(const gchar *text, gint start, gint end, gint *n,
 		gboolean *was_terminated);
 
 /*
+ * Free the first 'n' lines and the array that holds them.
+ *
+ * The line operations compact the array in place and it is not
+ * NULL-terminated, so g_strfreev() would walk into stale slots past the
+ * live lines. Everything that frees a line array uses this instead.
+ */
+void lo_doc_free_lines(gchar **lines, gint n);
+
+/*
  * Join 'n' lines with 'eol', appending a trailing terminator only when
  * '*was_terminated' is TRUE.
  *

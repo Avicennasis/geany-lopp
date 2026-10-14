@@ -30,6 +30,14 @@ lo_edit_get_range(ScintillaObject *sci, lo_range *range)
 {
 	gint last = sci_get_line_count(sci) - 1;
 
+	/*
+	 * Scintilla counts the empty "line" after a final terminator. It is
+	 * not a line of the file: sorting would float it to the top, and
+	 * removing empty lines would strip the file's last newline.
+	 */
+	if (last > 0 && sci_get_line_length(sci, last) == 0)
+		last--;
+
 	if (last < 0)
 		last = 0;
 
@@ -42,12 +50,12 @@ lo_edit_get_range(ScintillaObject *sci, lo_range *range)
 		range->end_line = sci_get_line_from_position(sci, end);
 
 		/*
-		 * A selection that stops exactly on a line's terminator does not
-		 * really include the next line, even though the position maps
-		 * onto it.
+		 * A selection that stops at the very start of a line does not
+		 * really include that line, even though the position maps onto
+		 * it.
 		 */
 		if (range->end_line > range->start_line &&
-				end == sci_get_line_end_position(sci, range->end_line))
+				end == sci_get_position_from_line(sci, range->end_line))
 			range->end_line--;
 
 		range->is_selection = TRUE;
@@ -65,6 +73,22 @@ lo_edit_get_range(ScintillaObject *sci, lo_range *range)
 		range->end_line = last;
 	if (range->end_line < range->start_line)
 		range->end_line = range->start_line;
+}
+
+
+/* The selected lines, or just the caret's line when nothing is selected. */
+static void
+get_caret_range(ScintillaObject *sci, lo_range *range)
+{
+	lo_edit_get_range(sci, range);
+
+	if (!range->is_selection)
+	{
+		gint line = sci_get_current_line(sci);
+
+		range->start_line = line;
+		range->end_line = line;
+	}
 }
 
 
@@ -163,15 +187,22 @@ lo_edit_run_line_op(GeanyEditor *editor, lo_line_op_fn fn, gpointer user_data)
 		mode = sci_get_selection_mode(sci);
 		sel_anchor = sci_get_selection_start(sci);
 		sel_caret = sci_get_selection_end(sci);
-
-		/* Replacing needs both ends empty, or the span stays highlighted. */
-		sci_set_selection_mode(sci, SC_SEL_STREAM);
-		sci_set_selection_start(sci, sel_anchor);
-		sci_set_selection_end(sci, sel_anchor);
 	}
 
+	/*
+	 * Select exactly the lines that were extracted, terminator included
+	 * when it was, so the replacement overwrites them rather than landing
+	 * beside them.
+	 */
+	sci_set_selection_mode(sci, SC_SEL_STREAM);
+	sci_set_selection_start(sci,
+			sci_get_position_from_line(sci, range.start_line));
+	sci_set_selection_end(sci, was_terminated
+			? sci_get_position_from_line(sci, range.end_line + 1)
+			: sci_get_line_end_position(sci, range.end_line));
+
 	sci_start_undo_action(sci);
-	delta = fn(lines, &n, user_data);
+	delta = fn(&lines, &n, user_data);
 
 	/*
 	 * lo_doc_reassemble() puts the trailing terminator back only if the
@@ -180,7 +211,7 @@ lo_edit_run_line_op(GeanyEditor *editor, lo_line_op_fn fn, gpointer user_data)
 	 */
 	text = lo_doc_reassemble(lines, n, editor_get_eol_char(editor),
 			was_terminated);
-	g_strfreev(lines);
+	lo_doc_free_lines(lines, n);
 
 	sci_replace_sel(sci, text);
 	sci_end_undo_action(sci);
@@ -243,7 +274,7 @@ lo_edit_duplicate_lines(GeanyEditor *editor, gpointer user_data)
 
 	(void) user_data;
 
-	lo_edit_get_range(sci, &range);
+	get_caret_range(sci, &range);
 
 	caret_pos = sci_get_current_position(sci);
 	caret_line = sci_get_line_from_position(sci, caret_pos);
@@ -251,10 +282,19 @@ lo_edit_duplicate_lines(GeanyEditor *editor, gpointer user_data)
 
 	lines = extract_range(sci, range.start_line, range.end_line, &n, NULL);
 
-	/* The copy always carries its own terminator, or it would run into
-	 * the line it was copied from. */
-	block = lo_doc_reassemble(lines, n, editor_get_eol_char(editor), TRUE);
-	g_strfreev(lines);
+	/*
+	 * The copy goes in at the end of the last line's text, so it leads
+	 * with a terminator and carries none of its own: that works the same
+	 * whether or not the original line was terminated.
+	 */
+	{
+		gchar *body = lo_doc_reassemble(lines, n,
+				editor_get_eol_char(editor), FALSE);
+
+		block = g_strconcat(editor_get_eol_char(editor), body, NULL);
+		g_free(body);
+	}
+	lo_doc_free_lines(lines, n);
 
 	sci_insert_text(sci, sci_get_line_end_position(sci, range.end_line),
 			block);
@@ -296,7 +336,7 @@ lo_edit_move_lines(GeanyEditor *editor, gpointer user_data)
 	gint first, last, n, region_start, region_end;
 	gint anchor_offset, caret_offset;
 
-	lo_edit_get_range(sci, &range);
+	get_caret_range(sci, &range);
 
 	if (up && range.start_line == 0)
 		return 0;
@@ -310,19 +350,19 @@ lo_edit_move_lines(GeanyEditor *editor, gpointer user_data)
 	lines = extract_range(sci, first, last, &n, &terminated);
 
 	/*
-	 * Within that window the block always occupies every position except
-	 * the one the neighbour sits in, so moving the block in the opposite
-	 * direction to the requested move puts it where it belongs.
+	 * Within that window the block occupies every position except the
+	 * neighbour's: [neighbour, block...] going up, [block..., neighbour]
+	 * going down. Moving it the requested way swaps the two.
 	 */
-	if (!lo_doc_move_block(lines, n, up ? 1 : 0, up ? n - 1 : n - 2, !up))
+	if (!lo_doc_move_block(lines, n, up ? 1 : 0, up ? n - 1 : n - 2, up))
 	{
-		g_strfreev(lines);
+		lo_doc_free_lines(lines, n);
 		return 0;
 	}
 
 	text = lo_doc_reassemble(lines, n, editor_get_eol_char(editor),
 			terminated);
-	g_strfreev(lines);
+	lo_doc_free_lines(lines, n);
 
 	/* Remember where the caret sat inside its own line. */
 	{
