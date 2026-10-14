@@ -8,7 +8,7 @@ improvements are all welcome.
 ```bash
 git clone https://github.com/Avicennasis/geany-lopp.git
 cd geany-lopp
-sudo apt install libgtk-3-dev geany-common   # build deps
+sudo apt install geany geany-common libgtk-3-dev pkg-config   # build deps
 make
 ```
 
