@@ -42,98 +42,98 @@ static GtkWidget *main_menu_item = NULL;
 /* Adapters: wrap the pure operations in the shape the runners expect     */
 /* --------------------------------------------------------------------- */
 
-#define LO_ADAPT(fn) \
-	static gint fn(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data) \
-	{ \
-		return fn##_impl(lines, *n, data); \
-	}
-
-#define LO_ADAPT_SORT(fn, impl) \
-	static gint fn(gchar **lines, gint *n, gpointer data) \
-	{ \
-		return impl(lines, *n, GPOINTER_TO_INT(data), \
-				lo_collation_enabled()); \
-	}
+/*
+ * The core functions report how many lines they dropped; the runner needs
+ * the array's new length. Every adapter that can drop lines turns one into
+ * the other, or the runner reads and frees lines that are already gone.
+ */
 
 static gint
-op_dedupe_sorted(gchar **lines, gint n, gint mode, gboolean collation)
+removed(gint *n, gint count)
 {
-	return lo_lines_dedupe_sorted(lines, n, (lo_sort_mode)mode, collation);
+	*n -= count;
+
+	return count;
+}
+
+
+static gint
+adapt_dedupe_sorted(gchar ***lines, gint *n, gpointer data)
+{
+	return removed(n, lo_lines_dedupe_sorted(*lines, *n,
+			(lo_sort_mode)GPOINTER_TO_INT(data), lo_collation_enabled()));
 }
 
 static gint
-op_sort(gchar **lines, gint n, gint mode, gboolean collation)
+adapt_sort(gchar ***lines, gint *n, gpointer data)
 {
-	lo_sort_sort(lines, n, (lo_sort_mode)mode, collation);
+	lo_sort_sort(*lines, *n, (lo_sort_mode)GPOINTER_TO_INT(data),
+			lo_collation_enabled());
 
 	return 0;       /* nothing was removed, only reordered */
 }
 
-LO_ADAPT_SORT(adapt_dedupe_sorted, op_dedupe_sorted)
-LO_ADAPT_SORT(adapt_sort, op_sort)
-
 static gint
-adapt_dedupe_ordered(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_dedupe_ordered(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	return lo_lines_dedupe_ordered(lines, *n);
+	return removed(n, lo_lines_dedupe_ordered(*lines, *n));
 }
 
 static gint
-adapt_dedupe_consecutive(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_dedupe_consecutive(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	return lo_lines_dedupe_consecutive(lines, *n);
+	return removed(n, lo_lines_dedupe_consecutive(*lines, *n));
 }
 
 static gint
-adapt_remove_unique(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_remove_unique(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	return lo_lines_remove_unique(lines, *n);
+	return removed(n, lo_lines_remove_unique(*lines, *n));
 }
 
 static gint
-adapt_keep_unique(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_keep_unique(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	return lo_lines_keep_unique(lines, *n);
+	return removed(n, lo_lines_keep_unique(*lines, *n));
 }
 
 static gint
-adapt_remove_empty(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_remove_empty(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	return lo_lines_remove_empty(lines, *n);
+	return removed(n, lo_lines_remove_empty(*lines, *n));
 }
 
 static gint
-adapt_remove_whitespace(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_remove_whitespace(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	return lo_lines_remove_whitespace(lines, *n);
+	return removed(n, lo_lines_remove_whitespace(*lines, *n));
 }
 
 static gint
-adapt_trim_trailing(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_trim_trailing(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	return lo_lines_trim_trailing(lines, *n);
+	return lo_lines_trim_trailing(*lines, *n);
 }
 
 static gint
-adapt_trim_leading(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_trim_leading(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	return lo_lines_trim_leading(lines, *n);
+	return lo_lines_trim_leading(*lines, *n);
 }
 
 static gint
-adapt_join(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_join(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	return lo_lines_join(lines, *n, lo_info->join_separator);
+	/* lo_lines_join() returns the negative of the lines it removed. */
+	return removed(n, -lo_lines_join(*lines, *n, lo_info->join_separator));
 }
 
 static gint
-adapt_split(gchar **lines, gint *n, G_GNUC_UNUSED gpointer data)
+adapt_split(gchar ***lines, gint *n, G_GNUC_UNUSED gpointer data)
 {
-	/* lo_lines_split() reallocates, so it needs the array by reference. */
-	gchar **tmp = lines;
-	gint count = *n;
-
-	return lo_lines_split(&tmp, &count, lo_info->split_separator);
+	/* lo_lines_split() replaces the array and its count itself, and
+	 * returns the positive number of lines it added. */
+	return -lo_lines_split(lines, n, lo_info->split_separator);
 }
 
 
@@ -157,6 +157,20 @@ sci_remove_every_nth(GeanyEditor *editor, G_GNUC_UNUSED gpointer data)
 	lo_info->remove_every_nth = (gint)n;
 
 	return lo_edit_remove_every_nth(editor, GINT_TO_POINTER((gint)n));
+}
+
+
+static gint
+sci_move_up(GeanyEditor *editor, G_GNUC_UNUSED gpointer data)
+{
+	return lo_edit_move_lines(editor, GINT_TO_POINTER(TRUE));
+}
+
+
+static gint
+sci_move_down(GeanyEditor *editor, G_GNUC_UNUSED gpointer data)
+{
+	return lo_edit_move_lines(editor, GINT_TO_POINTER(FALSE));
 }
 
 
@@ -188,9 +202,9 @@ static lo_menu_item menu_items[] =
 	{ N_("_Duplicate Current Line"), "duplicate_current_line",
 		LO_MENU_SCI, NULL, lo_edit_duplicate_lines, 0 },
 	{ N_("_Move Line Up"), "move_line_up",
-		LO_MENU_SCI, NULL, lo_edit_move_lines, 0 },
+		LO_MENU_SCI, NULL, sci_move_up, 0 },
 	{ N_("_Move Line Down"), "move_line_down",
-		LO_MENU_SCI, NULL, lo_edit_move_lines, 0 },
+		LO_MENU_SCI, NULL, sci_move_down, 0 },
 	{ NULL, NULL, 0, NULL, NULL, 0 },
 
 	{ N_("Remove _Duplicate Lines, _Sorted"), "remove_duplicate_lines_sorted",

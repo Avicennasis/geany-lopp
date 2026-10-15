@@ -359,6 +359,37 @@ test_move_block(void)
 }
 
 
+/*
+ * The line operations compact the array in place, so after one runs the
+ * slots past the new count hold stale pointers - freed strings, or second
+ * copies of survivors - and the array was never NULL-terminated in the
+ * first place. Only the first 'n' entries may be freed. Run under
+ * make asan, freeing by terminator instead reports the overrun.
+ */
+static void
+test_free_lines(void)
+{
+	gchar **lines = g_new(gchar *, 3);      /* exactly 3: no terminator */
+
+	g_print("freeing a compacted line array\n");
+
+	lines[0] = g_strdup("keep");
+	lines[1] = g_strdup("drop");
+	lines[2] = g_strdup("keep too");
+
+	/* What a removal leaves behind: survivor moved down over the dropped
+	 * line, and its old slot still pointing at it. */
+	g_free(lines[1]);
+	lines[1] = lines[2];
+
+	lo_doc_free_lines(lines, 2);
+	CHECK(TRUE, "freeing the live prefix must not touch the stale tail");
+
+	lo_doc_free_lines(NULL, 0);
+	CHECK(TRUE, "freeing nothing is a no-op");
+}
+
+
 static void
 test_slice(void)
 {
@@ -399,6 +430,7 @@ main(void)
 	test_reassemble();
 	test_roundtrip();
 	test_move_block();
+	test_free_lines();
 	test_slice();
 
 	g_print("\n%d checks, %d failures\n", checks, failures);

@@ -195,6 +195,21 @@ lo_doc_extract(const gchar *text, gint start, gint end, gint *n,
 }
 
 
+void
+lo_doc_free_lines(gchar **lines, gint n)
+{
+	gint i;
+
+	if (lines == NULL)
+		return;
+
+	for (i = 0; i < n; i++)
+		g_free(lines[i]);
+
+	g_free(lines);
+}
+
+
 gchar *
 lo_doc_reassemble(gchar **lines, gint n, const gchar *eol,
 		gboolean was_terminated)

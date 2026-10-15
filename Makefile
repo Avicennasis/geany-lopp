@@ -6,6 +6,7 @@
 # Targets:
 #   make            build tests and the plugin
 #   make test       build and run the Geany-independent core tests
+#   make e2e        drive every menu entry in a real, headless Geany
 #   make install    install the plugin into Geany's plugin directory
 #   make install-user   install into ~/.local/lib/geany (no root needed)
 #   make clean
@@ -49,7 +50,7 @@ TEST_CORE := tests/test_lo_core
 TEST_DOC  := tests/test_lo_doc
 TEST_BIN := $(TEST_CORE) $(TEST_DOC)
 
-.PHONY: all test asan clean install install-user uninstall
+.PHONY: all test asan e2e clean install install-user uninstall
 
 all: $(TEST_CORE) $(TEST_DOC) $(TARGET)
 
@@ -81,6 +82,16 @@ asan:
 	$(MAKE) test \
 		CFLAGS="-O1 -g -std=c99 -fsanitize=address,undefined -fno-omit-frame-pointer" \
 		LDFLAGS="-fsanitize=address,undefined"
+
+# Build the plugin itself under AddressSanitizer and run every menu entry
+# in a throwaway Geany on a virtual display (needs Xvfb and xdotool).
+e2e:
+	$(MAKE) clean
+	$(MAKE) $(TARGET) \
+		CFLAGS="-O1 -g -fsanitize=address -fno-omit-frame-pointer" \
+		LDFLAGS="-fsanitize=address"
+	tests/e2e.sh ./$(TARGET)
+	$(MAKE) clean
 
 install: $(TARGET)
 	install -d $(DESTDIR)$(PLUGINDIR)
